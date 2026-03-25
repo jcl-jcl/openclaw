@@ -62,15 +62,22 @@ fix_permissions() {
     if [[ -d "${OPENCLAW_CONFIG_DIR}/workspace/.openclaw" ]]; then
       chown -R node:node "${OPENCLAW_CONFIG_DIR}/workspace/.openclaw" 2>/dev/null || true
     fi
-    # Ensure base directories exist and are owned by node
+    # Ensure base directories exist and are owned by node.
+    # mkdir -p creates intermediate dirs as root; chown them all explicitly.
     for dir in \
       "${OPENCLAW_CONFIG_DIR}" \
       "${OPENCLAW_CONFIG_DIR}/identity" \
+      "${OPENCLAW_CONFIG_DIR}/agents" \
+      "${OPENCLAW_CONFIG_DIR}/agents/main" \
       "${OPENCLAW_CONFIG_DIR}/agents/main/agent" \
-      "${OPENCLAW_CONFIG_DIR}/agents/main/sessions"; do
+      "${OPENCLAW_CONFIG_DIR}/agents/main/sessions" \
+      "${OPENCLAW_CONFIG_DIR}/credentials" \
+      "${OPENCLAW_CONFIG_DIR}/sessions"; do
       mkdir -p "$dir"
       chown node:node "$dir"
     done
+    # Catch any remaining root-owned files/dirs the find above may have missed
+    chown -R node:node "${OPENCLAW_CONFIG_DIR}" 2>/dev/null || true
   fi
 }
 
