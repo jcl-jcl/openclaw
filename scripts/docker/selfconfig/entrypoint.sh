@@ -5,8 +5,8 @@
 # NODE phase:  configure + start gateway
 set -euo pipefail
 
-OPENCLAW_HOME="${HOME:-/home/node}"
-OPENCLAW_CONFIG_DIR="${OPENCLAW_HOME}/.openclaw"
+# Hardcoded — container layout is fixed; HOME is unreliable when running as root.
+OPENCLAW_CONFIG_DIR="/home/node/.openclaw"
 OPENCLAW_GATEWAY_PORT="${OPENCLAW_GATEWAY_PORT:-18789}"
 OPENCLAW_GATEWAY_BIND="${OPENCLAW_GATEWAY_BIND:-lan}"
 OPENCLAW_SANDBOX="${OPENCLAW_SANDBOX:-}"
@@ -41,6 +41,7 @@ read_config_token() {
 # ── ROOT phase ──────────────────────────────────────────────────
 run_root_phase() {
   log "Fixing permissions on ${OPENCLAW_CONFIG_DIR}"
+  mkdir -p "${OPENCLAW_CONFIG_DIR}"
   chown -R node:node "${OPENCLAW_CONFIG_DIR}"
   log "Done. Dropping to user 'node'"
   export ENTRYPOINT_PHASE=node
