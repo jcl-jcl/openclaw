@@ -1,0 +1,84 @@
+# Self-configuring OpenClaw container — true one-click start.
+#
+# All initialization (permission fixes, token generation, config sync, sandbox
+# setup) happens automatically inside the entrypoint at container startup.
+# No host-side setup.sh needed.
+#
+# Usage (run from the repo root):
+#   # Minimal (auto-generates token, stores config in Docker volume):
+#   docker compose -f scripts/docker/selfconfig/docker-compose.yml up -d
+#
+#   # With explicit token and host-path config:
+#   OPENCLAW_GATEWAY_TOKEN=my-secret \
+#   OPENCLAW_CONFIG_DIR=$HOME/.openclaw \
+#   docker compose -f scripts/docker/selfconfig/docker-compose.yml up -d
+#
+#   # With sandbox enabled:
+#   OPENCLAW_SANDBOX=1 \
+#   docker compose -f scripts/docker/selfconfig/docker-compose.yml up -d
+#
+# Environment variables (all optional):
+#   OPENCLAW_IMAGE             - Container image (default: openclaw:local)
+#   OPENCLAW_GATEWAY_TOKEN     - Auth token (auto-generated if empty)
+#   OPENCLAW_GATEWAY_PORT      - Host port for gateway (default: 18789)
+#   OPENCLAW_BRIDGE_PORT       - Host port for bridge (default: 18790)
+#   OPENCLAW_GATEWAY_BIND      - "lan" or "loopback" (default: lan)
+#   OPENCLAW_CONFIG_DIR        - Host path for config (omit to use named volume)
+#   OPENCLAW_WORKSPACE_DIR     - Host path for workspace (omit to use named volume)
+#   OPENCLAW_SANDBOX           - "1" to enable sandbox isolation
+#   OPENCLAW_TZ                - IANA timezone (default: UTC)
+#   OPENCLAW_SKIP_ONBOARD      - "1" to skip onboarding on first start
+
+services:
+  openclaw-gateway:
+    image: ${OPENCLAW_IMAGE:-openclaw:local}
+    # Run as root so entrypoint can fix bind-mount ownership before dropping to
+    # the node user. The entrypoint handles privilege de-escalation via gosu.
+    user: root
+    environment:
+      HOME: /home/node
+      TERM: xterm-256color
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-}
+      OPENCLAW_GATEWAY_BIND: ${OPENCLAW_GATEWAY_BIND:-lan}
+      OPENCLAW_GATEWAY_PORT: ${OPENCLAW_GATEWAY_PORT:-18789}
+      OPENCLAW_SANDBOX: ${OPENCLAW_SANDBOX:-}
+      OPENCLAW_SKIP_ONBOARD: ${OPENCLAW_SKIP_ONBOARD:-1}
+      OPENCLAW_ALLOW_INSECURE_PRIVATE_WS: ${OPENCLAW_ALLOW_INSECURE_PRIVATE_WS:-}
+      CLAUDE_AI_SESSION_KEY: ${CLAUDE_AI_SESSION_KEY:-}
+      CLAUDE_WEB_SESSION_KEY: ${CLAUDE_WEB_SESSION_KEY:-}
+      CLAUDE_WEB_COOKIE: ${CLAUDE_WEB_COOKIE:-}
+      TZ: ${OPENCLAW_TZ:-UTC}
+    volumes:
+      - ${OPENCLAW_CONFIG_DIR:-openclaw-config}:/home/node/.openclaw
+      # Only needed when workspace lives on a separate host path or volume.
+      # Omit if workspace is under OPENCLAW_CONFIG_DIR (the default).
+      - ${OPENCLAW_WORKSPACE_DIR:-openclaw-workspace}:/home/node/.openclaw/workspace
+      # Uncomment for sandbox support (also set OPENCLAW_SANDBOX=1):
+      # - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "${OPENCLAW_GATEWAY_PORT:-18789}:18789"
+      - "${OPENCLAW_BRIDGE_PORT:-18790}:18790"
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:18789/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+# Ad-hoc CLI commands: use `docker compose exec` instead of a separate service:
+#   docker compose -f scripts/docker/selfconfig/docker-compose.yml \
+#     exec openclaw-gateway node dist/index.js channels login
+
+# Named volumes used when OPENCLAW_CONFIG_DIR / OPENCLAW_WORKSPACE_DIR are not
+# set. Docker auto-creates these on first run.
+volumes:
+  openclaw-config:
+  openclaw-workspace:
